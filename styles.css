@@ -264,13 +264,44 @@
     .loading { text-align: center; padding: 2rem; color: var(--text2); font-size: 13px; }
 
     /* ── Responsive ── */
-    @media (max-width: 600px) {
-      nav           { padding: 0 1rem; }
-      .view         { padding: 1rem; }
-      .nav-tab      { padding: 5px 8px; font-size: 11px; }
-      .detail-inner { padding-left: 14px; }
-      .talle-row    { grid-template-columns: 1fr 1fr; }
-      .hist-stats   { grid-template-columns: 1fr 1fr; }
-      .agent-grid   { grid-template-columns: 1fr; }
-      .agent-summary{ grid-template-columns: 1fr 1fr; }
-    }
+@media (max-width: 600px) {
+  nav {
+    padding: 0 1rem;
+    height: auto;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 1rem;
+  }
+  .nav-tabs {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    gap: 2px;
+    /* evita que los tabs salten de línea */
+    flex-wrap: nowrap;
+  }
+  .nav-tab { padding: 5px 10px; font-size: 11px; white-space: nowrap; }
+
+  .view { padding: 1rem; }
+
+  /* ── Tabla: scroll horizontal ── */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 520px; }
+
+  /* ── Ocultar columnas menos importantes en celular ── */
+  thead th:nth-child(5),
+  tbody td:nth-child(5) { display: none; } /* talles con stock */
+
+  .detail-inner { padding-left: 14px; }
+  .talle-row    { grid-template-columns: 1fr 1fr; }
+  .hist-stats   { grid-template-columns: 1fr 1fr; }
+  .agent-grid   { grid-template-columns: 1fr; }
+  .agent-summary{ grid-template-columns: 1fr 1fr; }
+
+  /* ── Toast al centro abajo ── */
+  .toast { right: 1rem; left: 1rem; bottom: 1rem; }
+
+  /* ── Modal ocupa más pantalla ── */
+  .modal { padding: 1rem; max-height: 95vh; }
+}
