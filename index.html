@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boutique Lee · Stock</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+  <!-- ── NAVEGACIÓN ── -->
+  <nav>
+    <div class="nav-brand">Boutique <span>Lee</span></div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showView('stock', this)">Stock</button>
+      <button class="nav-tab"        onclick="showView('scanner', this)">Scanner</button>
+      <button class="nav-tab"        onclick="showView('qr', this)">Etiquetas QR</button>
+      <button class="nav-tab"        onclick="showView('historial', this)">Historial</button>
+      <button class="nav-tab"        onclick="showView('asistente', this)">Asistente</button>
+    </div>
+  </nav>
+
+  <!-- ── VISTA: STOCK ── -->
+  <div class="view active" id="view-stock">
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Buscar modelo, artículo..." oninput="filterStock()" />
+      <select id="filtCat" onchange="filterStock()"><option value="">Todas las categorías</option></select>
+      <select id="filtStockStatus" onchange="filterStock()">
+        <option value="">Todo el stock</option>
+        <option value="ok">Con stock</option>
+        <option value="low">Stock bajo (= 1)</option>
+        <option value="zero">Sin stock</option>
+      </select>
+      <button class="btn btn-primary" onclick="openModal()">+ Nueva prenda</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="width:32px"></th>
+            <th>Artículo</th><th>Modelo</th><th>Color</th>
+            <th>Talles con stock</th><th>Stock total</th>
+            <th></th><th></th><th></th>
+          </tr>
+        </thead>
+        <tbody id="stock-tbody"><tr><td colspan="9" class="loading">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── VISTA: SCANNER ── -->
+  <div class="view" id="view-scanner">
+    <div class="scanner-wrap">
+      <div class="scanner-box">
+        <video id="scanner-video" autoplay playsinline style="display:none"></video>
+        <div class="scanner-ph" id="scanner-ph">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <path d="M14 14h.01M14 17h.01M17 14h.01M17 17h.01M20 14h.01M20 17h.01M20 20h.01M17 20h.01M14 20h.01"/>
+          </svg>
+          <p style="font-size:13px">Apuntá la cámara al código QR</p>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:1rem" onclick="startScanner()">Activar cámara</button>
+      <div class="manual-input">
+        <input type="text" id="manual-code" placeholder="O ingresá el código manualmente (ej: 100-23)" />
+        <button class="btn btn-ghost" onclick="searchByCode(document.getElementById('manual-code').value)">Buscar</button>
+      </div>
+      <div id="scanner-result"></div>
+    </div>
+  </div>
+
+  <!-- ── VISTA: ETIQUETAS QR ── -->
+  <div class="view" id="view-qr">
+    <div class="toolbar">
+      <input type="text" id="qr-search" placeholder="Buscar..." oninput="renderQR()" style="flex:1;min-width:160px;height:38px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 12px;font-family:'DM Sans',sans-serif;font-size:13px;background:var(--bg2);color:var(--text);outline:none;" />
+      <button class="btn btn-accent" onclick="window.print()">Imprimir etiquetas</button>
+    </div>
+    <div class="qr-grid" id="qr-grid"></div>
+  </div>
+
+  <!-- ── VISTA: HISTORIAL ── -->
+  <div class="view" id="view-historial">
+
+    <!-- Filtros -->
+    <div class="toolbar">
+      <select id="hist-filtro" onchange="renderHistorial()">
+        <option value="7">Últimos 7 días</option>
+        <option value="30" selected>Últimos 30 días</option>
+        <option value="90">Últimos 90 días</option>
+        <option value="0">Todo</option>
+      </select>
+      <input type="text" id="hist-search" placeholder="Buscar artículo, modelo..." oninput="renderHistorial()" style="flex:1;min-width:160px" />
+    </div>
+
+    <!-- Tarjetas de resumen -->
+    <div class="hist-stats" id="hist-stats"></div>
+
+    <!-- Gráfico de ventas por día -->
+    <div class="chart-wrap">
+      <div class="chart-title">Ventas por día (unidades)</div>
+      <canvas id="chart-ventas" height="100"></canvas>
+    </div>
+
+    <!-- Tabla de ventas -->
+    <div class="hist-table">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha y hora</th>
+            <th>Artículo</th>
+            <th>Modelo</th>
+            <th>Color</th>
+            <th>Talle</th>
+            <th>Cant.</th>
+            <th>Precio lista</th>
+            <th>Precio efectivo</th>
+            <th>Monto total</th>
+          </tr>
+        </thead>
+        <tbody id="hist-tbody"><tr><td colspan="9" class="loading">Cargando...</td></tr></tbody>
+      </table>
+    </div>
+
+    <!-- Zona peligrosa: resetear -->
+    <div class="danger-zone">
+      <p>⚠️ Zona de prueba — podés borrar todo el historial para empezar de cero cuando quieras.</p>
+      <button class="btn btn-danger" onclick="confirmarResetHistorial()">Resetear historial</button>
+    </div>
+  </div>
+
+  <div class="view" id="view-asistente">
+    <div class="toolbar">
+      <button class="btn btn-primary" onclick="renderAsistente()">Analizar ahora</button>
+      <button class="btn btn-ghost" onclick="loadStock().then(renderAsistente)">Actualizar datos</button>
+    </div>
+
+    <div class="agent-grid">
+      <section class="agent-panel">
+        <div class="agent-head">
+          <div>
+            <div class="agent-kicker">Agente 1</div>
+            <h3>Stock bajo</h3>
+          </div>
+          <span class="agent-count" id="agent-stock-count">0</span>
+        </div>
+        <div class="agent-body" id="agent-stock-bajo">
+          <div class="agent-empty">Todavía no se analizó el stock.</div>
+        </div>
+      </section>
+
+      <section class="agent-panel">
+        <div class="agent-head">
+          <div>
+            <div class="agent-kicker">Agente 2</div>
+            <h3>Resumen diario</h3>
+          </div>
+          <span class="agent-count" id="agent-resumen-count">0</span>
+        </div>
+        <div class="agent-body" id="agent-resumen-diario">
+          <div class="agent-empty">Todavía no se calculó el resumen de hoy.</div>
+        </div>
+      </section>
+
+      <section class="agent-panel">
+        <div class="agent-head">
+          <div>
+            <div class="agent-kicker">Agente 3</div>
+            <h3>Control de errores</h3>
+          </div>
+          <span class="agent-count" id="agent-error-count">0</span>
+        </div>
+        <div class="agent-body" id="agent-control-errores">
+          <div class="agent-empty">Todavía no se revisaron inconsistencias.</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ── MODAL: NUEVA / EDITAR PRENDA ── -->
+  <div class="modal-overlay" id="modal">
+    <div class="modal" style="max-width:560px">
+      <div class="modal-header">
+        <h3 id="modal-title">Nueva prenda</h3>
+        <button class="modal-close" onclick="closeModal()">×</button>
+      </div>
+      <div class="form-group">
+        <label>Artículo (ej: 100-23)</label>
+        <input type="text" id="f-art" placeholder="100-23" />
+      </div>
+      <div class="form-group">
+        <label>Nombre del modelo</label>
+        <input type="text" id="f-modelo" placeholder="Remera modal escote lisa" />
+      </div>
+      <div class="section-label" style="margin-top:.75rem">Colores</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">Seleccioná uno o más colores. Los talles y precios se aplican a todos.</p>
+      <div id="color-chips-wrap" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:4px">
+        <input type="text" id="f-color-custom" placeholder="Otro color..." style="flex:1;height:32px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);outline:none" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarColorCustom()}" />
+        <button class="btn btn-ghost btn-sm" onclick="agregarColorCustom()">+ Agregar</button>
+      </div>
+      <div id="colores-seleccionados-hint" style="font-size:11px;color:var(--text2);min-height:16px;margin-bottom:2px"></div>
+      <div class="section-label" style="margin-top:.75rem">Talles</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:8px">Seleccioná los talles disponibles.</p>
+      <div id="talle-chips-wrap" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <input type="text" id="f-talle-custom" placeholder="Otro talle..." style="flex:1;height:32px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:0 10px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);outline:none" onkeydown="if(event.key==='Enter'){event.preventDefault();agregarTalleCustom()}" />
+        <button class="btn btn-ghost btn-sm" onclick="agregarTalleCustom()">+ Agregar</button>
+      </div>
+      <div class="section-label" style="margin-top:0">Stock y precio por talle</div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Completá el stock y precio de cada talle. El precio efectivo se calcula solo (−10%, redondeado a $500).</p>
+      <div id="talles-container"></div>
+      <div id="modal-color-hint" style="display:none;font-size:12px;color:var(--text2);margin-top:8px;padding:6px 10px;background:#f5efe6;border-radius:6px;border-left:3px solid var(--accent)"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost"   onclick="closeModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="guardarPrenda()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TOAST ── -->
+  <div class="toast" id="toast" style="position:fixed">
+    <span class="toast-msg" id="toast-msg"></span>
+    <button class="toast-undo" id="toast-undo-btn" style="display:none" onclick="deshacerUltimaVenta()">↩ Deshacer</button>
+    <div class="toast-progress" id="toast-progress"></div>
+  </div>
+
+  <!-- ── MODAL: REGISTRAR VENTA ── -->
+  <div class="modal-overlay" id="modal-venta">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3 id="venta-title">Registrar venta</h3>
+        <button class="modal-close" onclick="closeVentaModal()">×</button>
+      </div>
+      <div id="venta-art-info" style="background:#f5efe6;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:1rem;display:none">
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--accent2)" id="venta-art-code"></div>
+        <div style="font-weight:600;font-size:14px;margin-top:2px" id="venta-art-modelo"></div>
+      </div>
+      <div class="form-group">
+        <label>Color</label>
+        <select class="venta-select" id="venta-color" onchange="ventaOnColorChange()"><option value="">— Seleccioná un color —</option></select>
+      </div>
+      <div class="form-group">
+        <label>Talle</label>
+        <select class="venta-select" id="venta-talle" onchange="ventaOnTalleChange()" disabled><option value="">— Seleccioná un talle —</option></select>
+      </div>
+      <div class="form-group" style="display:flex;gap:12px;align-items:end">
+        <div style="flex:1">
+          <label>Cantidad a vender</label>
+          <input type="number" class="qty-input" id="venta-qty" value="1" min="1" oninput="ventaOnQtyChange()" style="width:100%" />
+        </div>
+      </div>
+      <div class="venta-resumen" id="venta-resumen" style="display:none">
+        <div class="vr-row"><span class="vr-label">Stock actual</span><span class="vr-val" id="vr-stock-actual">—</span></div>
+        <div class="vr-row"><span class="vr-label">Quedará después</span><span class="vr-val" id="vr-stock-despues">—</span></div>
+        <div class="vr-row" id="vr-precio-row" style="display:none"><span class="vr-label">Precio lista</span><span class="vr-val precio" id="vr-precio">—</span></div>
+        <div class="vr-row" id="vr-ef-row"     style="display:none"><span class="vr-label">Precio efectivo</span><span class="vr-val precio" id="vr-ef">—</span></div>
+      </div>
+      <div id="venta-error" style="display:none;margin-top:10px;padding:8px 12px;background:#fde8e8;border-radius:6px;font-size:12px;color:var(--danger)"></div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost"   onclick="closeVentaModal()">Cancelar</button>
+        <button class="btn btn-accent"  id="btn-confirmar-venta" onclick="confirmarVenta()" disabled>Confirmar venta</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: ELIMINAR ── -->
+  <div class="modal-overlay" id="modal-eliminar">
+    <div class="modal" style="max-width:420px">
+      <div class="modal-header">
+        <h3 id="elim-title">Eliminar artículo</h3>
+        <button class="modal-close" onclick="closeEliminarModal()">×</button>
+      </div>
+      <div style="background:#fde8e8;border:1px solid #f5c0c0;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1.25rem">
+        <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--danger);margin-bottom:2px" id="elim-art-code"></div>
+        <div style="font-weight:600;font-size:14px" id="elim-art-modelo"></div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px" id="elim-art-colores"></div>
+      </div>
+      <div id="elim-bloque-color" style="margin-bottom:10px">
+        <div style="font-size:13px;font-weight:500;margin-bottom:6px">Solo un color</div>
+        <select class="venta-select" id="elim-color-sel" onchange="elimOnColorChange()"><option value="">— Seleccioná un color —</option></select>
+        <div id="elim-color-detalle" style="display:none;margin-top:8px;font-size:12px;color:var(--text2);background:var(--bg3);padding:8px 10px;border-radius:6px"></div>
+        <button class="btn btn-danger" style="margin-top:10px;width:100%" id="btn-elim-color" onclick="confirmarEliminarColor()" disabled>Eliminar este color</button>
+      </div>
+      <div style="border-top:1px solid var(--border);margin:14px 0"></div>
+      <div>
+        <div style="font-size:13px;font-weight:500;margin-bottom:4px">Artículo completo</div>
+        <div style="font-size:12px;color:var(--text2);margin-bottom:10px" id="elim-total-desc"></div>
+        <button class="btn btn-danger" style="width:100%" onclick="confirmarEliminarTodo()">Eliminar artículo completo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MODAL: CONFIRMAR RESET HISTORIAL ── -->
+  <div class="modal-overlay" id="modal-reset">
+    <div class="modal" style="max-width:400px">
+      <div class="modal-header">
+        <h3>Resetear historial</h3>
+        <button class="modal-close" onclick="document.getElementById('modal-reset').classList.remove('open')">×</button>
+      </div>
+      <p style="font-size:13px;color:var(--text2);margin-bottom:1.25rem">
+        Esto borrará <strong>permanentemente</strong> todas las ventas registradas. El stock de las prendas <strong>no se modifica</strong>. Esta acción no se puede deshacer.
+      </p>
+      <div style="background:#fde8e8;border:1px solid #f5c0c0;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:1.25rem;font-size:13px;color:var(--danger)">
+        ⚠️ ¿Estás seguro que querés borrar todo el historial?
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="document.getElementById('modal-reset').classList.remove('open')">Cancelar</button>
+        <button class="btn btn-danger" onclick="ejecutarResetHistorial()">Sí, borrar todo</button>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="./firebase-init.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.min.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
