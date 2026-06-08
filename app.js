@@ -455,25 +455,60 @@
 
     // ── Scanner ───────────────────────────────────────────
     function startScanner() {
-      const video = document.getElementById('scanner-video');
-      const ph    = document.getElementById('scanner-ph');
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(stream => {
-          scannerStream = stream; video.srcObject = stream;
-          video.style.display = 'block'; ph.style.display = 'none';
-          const canvas = document.createElement('canvas');
-          const ctx    = canvas.getContext('2d');
-          scannerInterval = setInterval(() => {
-            if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
-            canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-            ctx.drawImage(video, 0, 0);
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height);
-            if (code) { stopScanner(); searchByCode(code.data); }
-          }, 300);
-        }).catch(() => showToast('No se pudo acceder a la cámara'));
-    }
-    window.startScanner = startScanner;
+  const video = document.getElementById('scanner-video');
+  const ph    = document.getElementById('scanner-ph');
+
+  navigator.mediaDevices.getUserMedia({ 
+    video: { 
+      facingMode: 'environment',
+      width:  { ideal: 1280 },
+      height: { ideal: 720 }
+    } 
+  })
+  .then(stream => {
+    scannerStream = stream;
+    video.srcObject = stream;
+    video.style.display = 'block';
+    ph.style.display = 'none';
+
+    // Canvas persistente — se crea una sola vez y se reutiliza
+    const canvas = document.createElement('canvas');
+    const ctx    = canvas.getContext('2d', { willReadFrequently: true });
+
+    video.addEventListener('loadedmetadata', () => {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+    });
+
+    scannerInterval = setInterval(() => {
+      // Esperar que el video tenga datos Y dimensiones válidas
+      if (video.readyState < video.HAVE_ENOUGH_DATA) return;
+      if (video.videoWidth === 0 || video.videoHeight === 0) return;
+
+      // Re-sincronizar si el tamaño cambió (rotación de pantalla)
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+      }
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert'   // más rápido; cambiá a 'attemptBoth' si hay QRs invertidos
+      });
+
+      if (code) {
+        stopScanner();
+        searchByCode(code.data);
+      }
+    }, 200); // 200ms es más responsivo que 300ms
+  })
+  .catch(err => {
+    console.error('Camera error:', err);
+    showToast('No se pudo acceder a la cámara. Verificá los permisos.');
+  });
+}
+window.startScanner = startScanner;
 
     function stopScanner() {
       if (scannerStream)   { scannerStream.getTracks().forEach(t => t.stop()); scannerStream = null; }
