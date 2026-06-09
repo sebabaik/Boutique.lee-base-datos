@@ -28,4 +28,15 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
     window._Timestamp  = Timestamp;
     window._writeBatch = writeBatch;
 
-    window.addEventListener('load', () => loadStock());
+    window.addEventListener('load', async () => {
+  await loadStock();
+  // Leer parámetro ?art= si viene desde un QR externo
+  const params = new URLSearchParams(location.search);
+  const artParam = params.get('art');
+  if (artParam) {
+    // Ir a la vista scanner y buscar
+    const scanBtn = document.querySelector('.nav-tab:nth-child(2)');
+    showView('scanner', scanBtn);
+    searchByCode(artParam);
+  }
+});

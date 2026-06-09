@@ -537,7 +537,8 @@ window.startScanner = startScanner;
     }
     window.scanSelectColor = scanSelectColor;
 
-    function searchByCode(code) {
+    async function searchByCode(code) {
+      if (!allPrendas.length) await loadStock();
       const resultDiv = document.getElementById('scanner-result');
       const art       = code.trim();
       const prendas   = allPrendas.filter(p => p.art === art);
@@ -575,15 +576,18 @@ window.startScanner = startScanner;
       const artsCodigos = [...new Set(allPrendas.map(p => p.art))].filter(art => { if (!q) return true; const prenda = allPrendas.find(p => p.art === art); return art.toLowerCase().includes(q) || prenda?.modelo.toLowerCase().includes(q); });
       if (!artsCodigos.length) { grid.innerHTML = '<p style="color:var(--text2);font-size:13px">No hay prendas cargadas aún.</p>'; return; }
       artsCodigos.forEach(art => {
-        const prenda = allPrendas.find(p => p.art === art);
-        const card   = document.createElement('div'); card.className = 'qr-card';
-        const qrDiv  = document.createElement('div');
-        card.appendChild(qrDiv);
-        card.innerHTML += `<div class="qr-art">${art}</div><div class="qr-name">${prenda?.modelo||''}</div>`;
-        card.insertBefore(qrDiv, card.firstChild);
-        grid.appendChild(card);
-        try { new QRCode(qrDiv, { text: art, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.M }); } catch(e) {}
-      });
+    const prenda = allPrendas.find(p => p.art === art);
+    const card   = document.createElement('div'); card.className = 'qr-card';
+    const qrDiv  = document.createElement('div');
+    card.appendChild(qrDiv);
+    card.innerHTML += `<div class="qr-art">${art}</div><div class="qr-name">${prenda?.modelo||''}</div>`;
+    card.insertBefore(qrDiv, card.firstChild);
+    grid.appendChild(card);
+    try {
+      const url = `${location.origin}${location.pathname}?art=${encodeURIComponent(art)}`;
+      new QRCode(qrDiv, { text: url, width: 120, height: 120, correctLevel: QRCode.CorrectLevel.M });
+    } catch(e) {}
+});
     }
     window.renderQR = renderQR;
 
