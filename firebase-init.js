@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getFirestore, collection, addDoc, getDocs,
              doc, updateDoc, deleteDoc, query, orderBy, where,
-             Timestamp, writeBatch } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+             Timestamp, writeBatch, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey:            "AIzaSyBwFXyhzOkOhxupjLDDpIpJDFyNcLbMBGg",
@@ -26,7 +26,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/fireba
     window._ord        = orderBy;
     window._where      = where;
     window._Timestamp  = Timestamp;
-    window._writeBatch = writeBatch;
+    window._writeBatch  = writeBatch;
+    window._onSnapshot  = onSnapshot;
 
     window.addEventListener('load', async () => {
   await loadStock();

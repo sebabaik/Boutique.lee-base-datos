@@ -18,6 +18,7 @@
       <button class="nav-tab"        onclick="showView('scanner', this)">Scanner</button>
       <button class="nav-tab"        onclick="showView('qr', this)">Etiquetas QR</button>
       <button class="nav-tab"        onclick="showView('historial', this)">Historial</button>
+      <button class="nav-tab"        onclick="showView('caja', this)">🛒 Caja</button>
       <button class="nav-tab"        onclick="showView('asistente', this)">Asistente</button>
     </div>
   </nav>
@@ -177,6 +178,149 @@
           <div class="agent-empty">Todavía no se revisaron inconsistencias.</div>
         </div>
       </section>
+    </div>
+  </div>
+
+  <!-- ── VISTA: CAJA ── -->
+  <div class="view" id="view-caja">
+
+    <!-- Selector de modo -->
+    <div class="caja-mode-bar">
+      <button class="caja-mode-btn active" id="caja-btn-empleado" onclick="setCajaMode('empleado')">
+        <span class="caja-mode-icon">🏷️</span>
+        <span>Empleado</span>
+        <span class="caja-mode-sub">Armar carrito</span>
+      </button>
+      <button class="caja-mode-btn" id="caja-btn-cajero" onclick="setCajaMode('cajero')">
+        <span class="caja-mode-icon">💳</span>
+        <span>Cajero</span>
+        <span class="caja-mode-sub">Cobrar ventas</span>
+        <span class="caja-pending-badge" id="caja-pending-badge" style="display:none">0</span>
+      </button>
+    </div>
+
+    <!-- MODO EMPLEADO -->
+    <div id="caja-panel-empleado">
+      <div class="caja-panel">
+        <div class="caja-panel-header">
+          <div>
+            <div class="caja-panel-title">Nuevo carrito</div>
+            <div class="caja-panel-sub">Escaneá o buscá las prendas del cliente</div>
+          </div>
+        </div>
+
+        <!-- Nombre del cliente -->
+        <div class="form-group" style="margin-bottom:12px">
+          <label>Nombre del cliente</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="caja-cliente-nombre" placeholder="Ej: Valentina" style="flex:1" oninput="cajaNombreChange()" />
+            <button class="btn btn-ghost btn-sm" onclick="cajaNuevoCarrito()" id="btn-nuevo-carrito">Nuevo carrito</button>
+          </div>
+        </div>
+
+        <!-- Carrito activo -->
+        <div id="caja-carrito-activo" style="display:none">
+          <div class="caja-carrito-header">
+            <span class="caja-carrito-cliente" id="caja-carrito-label"></span>
+            <button class="btn btn-danger btn-sm" onclick="cajaCancelarCarrito()">Cancelar</button>
+          </div>
+
+          <!-- Scanner / búsqueda para agregar -->
+          <div class="caja-add-prenda">
+            <input type="text" id="caja-scan-input" placeholder="Código de artículo (ej: 100-23)" onkeydown="if(event.key==='Enter')cajaAgregarPorCodigo()" />
+            <button class="btn btn-primary btn-sm" onclick="cajaAgregarPorCodigo()">+ Agregar</button>
+            <button class="btn btn-ghost btn-sm" onclick="cajaActivarScanner()" id="btn-caja-scanner">📷 Cámara</button>
+          </div>
+
+          <!-- Video scanner inline -->
+          <div id="caja-scanner-wrap" style="display:none;margin-bottom:12px">
+            <video id="caja-scanner-video" autoplay playsinline style="width:100%;border-radius:var(--radius-sm);max-height:220px;object-fit:cover"></video>
+            <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:6px" onclick="cajaDetenerScanner()">Detener cámara</button>
+          </div>
+
+          <!-- Selector rápido de talle/color -->
+          <div id="caja-selector-prenda" style="display:none" class="caja-selector-box">
+            <div class="caja-selector-art" id="caja-sel-art-info"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+              <div style="flex:1;min-width:130px">
+                <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Color</label>
+                <select id="caja-sel-color" onchange="cajaSelColorChange()" class="venta-select"></select>
+              </div>
+              <div style="flex:1;min-width:130px">
+                <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Talle</label>
+                <select id="caja-sel-talle" class="venta-select" disabled></select>
+              </div>
+              <div style="width:70px">
+                <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px">Cant.</label>
+                <input type="number" id="caja-sel-qty" value="1" min="1" class="qty-input" style="width:100%" />
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="btn btn-accent" style="flex:1" onclick="cajaConfirmarAgregar()">✓ Agregar al carrito</button>
+              <button class="btn btn-ghost btn-sm" onclick="cajaCerrarSelector()">Cancelar</button>
+            </div>
+          </div>
+
+          <!-- Lista de items del carrito -->
+          <div id="caja-items-list" class="caja-items-list"></div>
+
+          <!-- Total y botón enviar a caja -->
+          <div id="caja-footer" style="display:none" class="caja-footer">
+            <div class="caja-total-row">
+              <span>Total lista</span><span id="caja-total-lista" class="caja-total-val">$0</span>
+            </div>
+            <div class="caja-total-row">
+              <span>Total efectivo</span><span id="caja-total-ef" class="caja-total-val success">$0</span>
+            </div>
+            <button class="btn btn-primary" style="width:100%;margin-top:10px" onclick="cajaEnviarACaja()">
+              📤 Enviar a caja
+            </button>
+          </div>
+        </div>
+
+        <!-- Estado vacío -->
+        <div id="caja-empty-state" class="caja-empty">
+          <div style="font-size:32px;margin-bottom:8px">🛍️</div>
+          <p>Ingresá el nombre del cliente y tocá <strong>Nuevo carrito</strong> para empezar.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODO CAJERO -->
+    <div id="caja-panel-cajero" style="display:none">
+      <div class="caja-panel">
+        <div class="caja-panel-header">
+          <div>
+            <div class="caja-panel-title">Ventas pendientes</div>
+            <div class="caja-panel-sub">Se actualiza en tiempo real</div>
+          </div>
+          <span class="live-dot" title="En vivo">● en vivo</span>
+        </div>
+        <div id="caja-pendientes-list">
+          <div class="caja-empty"><p>No hay carritos pendientes de cobro.</p></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── MODAL: DETALLE CARRITO (cajero) ── -->
+  <div class="modal-overlay" id="modal-carrito">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-header">
+        <h3 id="modal-carrito-title">Detalle del carrito</h3>
+        <button class="modal-close" onclick="closeCarritoModal()">×</button>
+      </div>
+      <div id="modal-carrito-body"></div>
+      <div class="modal-actions" style="margin-top:1rem;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-ghost" onclick="closeCarritoModal()">Cerrar</button>
+        <button class="btn btn-danger" id="btn-cancelar-carrito" onclick="cajaCancelarDesdeModal()" style="margin-right:auto">
+          🗑 Cancelar venta
+        </button>
+        <button class="btn btn-accent" id="btn-cobrado" onclick="cajaMarcarCobrado()" style="font-size:15px;padding:10px 24px">
+          ✅ Vendido — cobrado
+        </button>
+      </div>
     </div>
   </div>
 

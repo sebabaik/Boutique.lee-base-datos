@@ -305,3 +305,225 @@
   /* ── Modal ocupa más pantalla ── */
   .modal { padding: 1rem; max-height: 95vh; }
 }
+
+/* ── CAJA ─────────────────────────────────────────── */
+
+.caja-mode-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 1.25rem;
+}
+.caja-mode-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px 10px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg2);
+  color: var(--text2);
+  cursor: pointer;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  position: relative;
+  transition: border-color .15s, background .15s;
+}
+.caja-mode-btn.active {
+  border-color: var(--accent);
+  background: var(--bg);
+  color: var(--text);
+}
+.caja-mode-icon { font-size: 22px; }
+.caja-mode-sub  { font-size: 11px; color: var(--text3); }
+.caja-pending-badge {
+  position: absolute;
+  top: 8px; right: 8px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 99px;
+  padding: 1px 7px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.caja-panel {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+.caja-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.caja-panel-title { font-size: 16px; font-weight: 600; }
+.caja-panel-sub   { font-size: 12px; color: var(--text2); margin-top: 2px; }
+
+.live-dot {
+  font-size: 11px;
+  color: var(--success, #4caf50);
+  font-weight: 600;
+  letter-spacing: .2px;
+}
+
+.caja-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text2);
+  font-size: 13px;
+}
+
+/* Carrito activo (empleado) */
+.caja-carrito-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.caja-carrito-cliente {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent2, var(--accent));
+}
+.caja-add-prenda {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.caja-add-prenda input {
+  flex: 1;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+  font-size: 13px;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  outline: none;
+}
+
+.caja-selector-box {
+  background: var(--bg3, var(--bg));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.caja-selector-art {
+  font-size: 13px;
+  color: var(--text2);
+}
+.caja-selector-art .art-code {
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  background: var(--bg2);
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-right: 6px;
+}
+
+.caja-items-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 40px;
+}
+.caja-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  gap: 8px;
+}
+.cir-info { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.cir-art  { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent2, var(--accent)); }
+.cir-modelo { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cir-meta { font-size: 11px; color: var(--text2); }
+.cir-precio { display: flex; align-items: center; gap: 6px; font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 600; white-space: nowrap; }
+
+.caja-footer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.caja-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+.caja-total-val { font-family: 'DM Mono', monospace; font-weight: 600; color: var(--text); }
+.caja-total-val.success { color: var(--success, #4caf50); }
+
+/* Pendientes (cajero) */
+.caja-pendiente-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color .15s, box-shadow .15s;
+}
+.caja-pendiente-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0,0,0,.06);
+}
+.cpc-top     { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.cpc-cliente { font-size: 15px; font-weight: 600; }
+.cpc-hora    { font-size: 11px; color: var(--text3); }
+.cpc-resumen { font-size: 12px; color: var(--text2); margin-bottom: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cpc-footer  { display: flex; justify-content: space-between; font-size: 12px; }
+.cpc-items   { color: var(--text3); }
+.cpc-total   { font-family: 'DM Mono', monospace; font-weight: 600; color: var(--accent2, var(--accent)); }
+
+/* Modal detalle carrito */
+.carrito-items-detalle { margin-bottom: 14px; }
+.cid-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+.cid-row:last-child { border-bottom: none; }
+.cid-info    { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.cid-art     { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--accent2, var(--accent)); }
+.cid-modelo  { font-size: 13px; font-weight: 500; }
+.cid-meta    { font-size: 11px; color: var(--text2); }
+.cid-precios { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
+.cid-lista   { font-size: 11px; color: var(--text3); font-family: 'DM Mono', monospace; }
+.cid-ef      { font-size: 13px; font-weight: 600; font-family: 'DM Mono', monospace; color: var(--text); }
+.carrito-total-box {
+  background: var(--bg2);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+}
+.carrito-total-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--text2);
+  margin-bottom: 4px;
+}
+.carrito-total-row.highlight {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-top: 6px;
+  margin-bottom: 0;
+}

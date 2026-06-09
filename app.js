@@ -143,6 +143,7 @@
       if (name === 'qr')       renderQR();
       if (name === 'historial') renderHistorial();
       if (name === 'asistente') renderAsistente();
+      if (name === 'caja')      initCajaView();
       if (name !== 'scanner')  stopScanner();
     }
     window.showView = showView;
@@ -1088,3 +1089,528 @@ window.startScanner = startScanner;
       } catch (e) { showToast('Error al eliminar.', null, 3000); }
     }
     window.confirmarEliminarTodo = confirmarEliminarTodo;
+
+// ── CAJA: Sistema de carritos ─────────────────────────────────────────
+
+// Estado
+let _cajaMode           = 'empleado';  // 'empleado' | 'cajero'
+let _carritoActivo      = null;        // { cliente, items: [{art, modelo, color, talle, qty, precioLista, precioEf}] }
+let _cajaArtPendiente   = null;        // artículo buscado esperando selección de color/talle
+let _cajaScanStream     = null;
+let _cajaScanInterval   = null;
+let _cajaSnapshotUnsub  = null;        // unsuscribe del listener onSnapshot
+let _carritoModalId     = null;        // id del carrito abierto en el modal cajero
+
+// ── Inicializar vista Caja ────────────────────────────────────────────
+function initCajaView() {
+  cajaDetenerScanner();
+  if (!_cajaSnapshotUnsub) suscribirCarritos();
+  setCajaMode(_cajaMode);
+}
+window.initCajaView = initCajaView;
+
+// ── Cambiar modo empleado / cajero ────────────────────────────────────
+function setCajaMode(mode) {
+  _cajaMode = mode;
+  document.getElementById('caja-btn-empleado').classList.toggle('active', mode === 'empleado');
+  document.getElementById('caja-btn-cajero').classList.toggle('active', mode === 'cajero');
+  document.getElementById('caja-panel-empleado').style.display = mode === 'empleado' ? '' : 'none';
+  document.getElementById('caja-panel-cajero').style.display   = mode === 'cajero'   ? '' : 'none';
+}
+window.setCajaMode = setCajaMode;
+
+// ── Listener en tiempo real de carritos ───────────────────────────────
+function suscribirCarritos() {
+  const q = window._q(
+    window._col(window._db, 'carritos'),
+    window._where('estado', '==', 'pendiente')
+  );
+  _cajaSnapshotUnsub = window._onSnapshot(q, (snap) => {
+    const carritos = snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => {
+        const ta = a.creadoEn?.toMillis ? a.creadoEn.toMillis() : (a.creadoEn || 0);
+        const tb = b.creadoEn?.toMillis ? b.creadoEn.toMillis() : (b.creadoEn || 0);
+        return tb - ta;
+      });
+    renderPendientes(carritos);
+    // Badge en botón cajero
+    const badge = document.getElementById('caja-pending-badge');
+    if (carritos.length > 0) {
+      badge.textContent = carritos.length;
+      badge.style.display = '';
+    } else {
+      badge.style.display = 'none';
+    }
+    // Si el modal cajero está abierto, actualizarlo también
+    if (_carritoModalId) {
+      const carr = carritos.find(c => c.id === _carritoModalId);
+      if (!carr) closeCarritoModal(); // ya fue cobrado por otro dispositivo
+    }
+  });
+}
+
+// ── Renderizar lista de pendientes (cajero) ───────────────────────────
+function renderPendientes(carritos) {
+  const el = document.getElementById('caja-pendientes-list');
+  if (!carritos.length) {
+    el.innerHTML = '<div class="caja-empty"><p>No hay carritos pendientes de cobro.</p></div>';
+    return;
+  }
+  el.innerHTML = carritos.map(c => {
+    const items   = c.items || [];
+    const totalEf = items.reduce((a, i) => a + (i.precioEf || 0) * (i.qty || 1), 0);
+    const resumen = items.map(i => `${i.art} · ${i.color} · T.${i.talle} ×${i.qty}`).join(', ');
+    const ts      = c.creadoEn?.toMillis ? c.creadoEn.toMillis() : (c.creadoEn || 0);
+    const hora    = ts ? new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '';
+    return `
+      <div class="caja-pendiente-card" onclick="abrirCarritoModal('${c.id}')">
+        <div class="cpc-top">
+          <span class="cpc-cliente">${escapeHtml(c.cliente)}</span>
+          <span class="cpc-hora">${hora}</span>
+        </div>
+        <div class="cpc-resumen">${escapeHtml(resumen)}</div>
+        <div class="cpc-footer">
+          <span class="cpc-items">${items.length} prenda${items.length !== 1 ? 's' : ''}</span>
+          <span class="cpc-total">${fmtPeso(totalEf)} efectivo</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Modal detalle carrito (cajero) ────────────────────────────────────
+async function abrirCarritoModal(id) {
+  _carritoModalId = id;
+  const snap = await window._get(window._col(window._db, 'carritos'));
+  const doc  = snap.docs.find(d => d.id === id);
+  if (!doc) return;
+  const c = { id: doc.id, ...doc.data() };
+  const items    = c.items || [];
+  const totalLista = items.reduce((a, i) => a + (i.precioLista || 0) * (i.qty || 1), 0);
+  const totalEf    = items.reduce((a, i) => a + (i.precioEf    || 0) * (i.qty || 1), 0);
+
+  document.getElementById('modal-carrito-title').textContent = '🛍️ ' + c.cliente;
+  document.getElementById('modal-carrito-body').innerHTML = `
+    <div class="carrito-items-detalle">
+      ${items.map(i => `
+        <div class="cid-row">
+          <div class="cid-info">
+            <span class="cid-art">${escapeHtml(i.art)}</span>
+            <span class="cid-modelo">${escapeHtml(i.modelo)}</span>
+            <span class="cid-meta">${escapeHtml(i.color)} · Talle ${escapeHtml(i.talle)} · ×${i.qty}</span>
+          </div>
+          <div class="cid-precios">
+            <span class="cid-lista">Lista: ${fmtPeso((i.precioLista||0) * i.qty)}</span>
+            <span class="cid-ef">Ef: ${fmtPeso((i.precioEf||0) * i.qty)}</span>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="carrito-total-box">
+      <div class="carrito-total-row"><span>Total precio lista</span><span>${fmtPeso(totalLista)}</span></div>
+      <div class="carrito-total-row highlight"><span>Total efectivo</span><span>${fmtPeso(totalEf)}</span></div>
+    </div>`;
+  document.getElementById('modal-carrito').classList.add('open');
+}
+window.abrirCarritoModal = abrirCarritoModal;
+
+function closeCarritoModal() {
+  document.getElementById('modal-carrito').classList.remove('open');
+  _carritoModalId = null;
+}
+window.closeCarritoModal = closeCarritoModal;
+
+// ── Cancelar carrito desde el modal cajero ────────────────────────────
+async function cajaCancelarDesdeModal() {
+  if (!_carritoModalId) return;
+  // Buscar el nombre del cliente para el mensaje
+  const snap = await window._get(window._col(window._db, 'carritos'));
+  const docCarrito = snap.docs.find(d => d.id === _carritoModalId);
+  if (!docCarrito) { closeCarritoModal(); return; }
+  const nombre = docCarrito.data().cliente || 'cliente';
+  if (!confirm(`¿Cancelar la venta de ${nombre}? El carrito se eliminará sin descontar stock.`)) return;
+  try {
+    await window._del(window._doc(window._db, 'carritos', _carritoModalId));
+    closeCarritoModal();
+    showToast(`🗑 Venta de ${nombre} cancelada`, null, 3000);
+  } catch (e) {
+    showToast('Error al cancelar. Revisá la conexión.');
+  }
+}
+window.cajaCancelarDesdeModal = cajaCancelarDesdeModal;
+
+
+async function cajaMarcarCobrado() {
+  if (!_carritoModalId) return;
+  const btn = document.getElementById('btn-cobrado');
+  btn.disabled = true;
+  btn.textContent = 'Procesando...';
+
+  try {
+    const snapCarrito = await window._get(window._col(window._db, 'carritos'));
+    const docCarrito  = snapCarrito.docs.find(d => d.id === _carritoModalId);
+    if (!docCarrito) { closeCarritoModal(); return; }
+    const carrito = { id: docCarrito.id, ...docCarrito.data() };
+    const items   = carrito.items || [];
+
+    // Recargar stock actualizado antes de descontar
+    await loadStock();
+
+    const batch = window._writeBatch(window._db);
+    const stockAntes = []; // para deshacer
+    const ventasIds  = []; // para deshacer
+
+    for (const item of items) {
+      const { art, color, talle, qty } = item;
+      const docs = allPrendas.filter(p =>
+        p.art === art &&
+        (p.color || '').trim() === color &&
+        p.talles?.[talle] &&
+        (parseInt(p.talles[talle].stock) || 0) > 0
+      );
+      let restante = qty;
+      for (const p of docs) {
+        if (restante <= 0) break;
+        const stockDoc  = parseInt(p.talles[talle].stock) || 0;
+        const descuento = Math.min(stockDoc, restante);
+        restante -= descuento;
+        stockAntes.push({ id: p.id, tallesAntes: { ...p.talles } });
+        const nuevosTalles = { ...p.talles, [talle]: { ...p.talles[talle], stock: stockDoc - descuento } };
+        batch.update(window._doc(window._db, 'prendas', p.id), { talles: nuevosTalles });
+      }
+
+      const modelo         = allPrendas.find(p => p.art === art)?.modelo || item.modelo || '';
+      const precioLista    = item.precioLista || 0;
+      const precioEfectivo = item.precioEf || 0;
+      const ventaRef       = window._doc(window._col(window._db, 'ventas'));
+      ventasIds.push(ventaRef.id);
+      batch.set(ventaRef, {
+        fecha:   window._Timestamp.now(),
+        art, modelo, color, talle,
+        cantidad: qty,
+        precioLista, precioEfectivo,
+        origen: 'caja',
+        cliente: carrito.cliente,
+      });
+    }
+
+    // Marcar carrito como cobrado
+    batch.update(window._doc(window._db, 'carritos', _carritoModalId), {
+      estado:   'cobrado',
+      cobradoEn: window._Timestamp.now(),
+    });
+
+    await batch.commit();
+    allVentas = []; // forzar recarga
+
+    closeCarritoModal();
+    await loadStock();
+    showToast(
+      `✓ Venta cobrada — ${carrito.cliente} · ${items.length} prenda${items.length !== 1 ? 's' : ''}`,
+      async () => await cajaDeshacerCobro(carrito, ventasIds),
+      8000
+    );
+
+  } catch (e) {
+    console.error(e);
+    showToast('Error al procesar la venta. Revisá la conexión.');
+    btn.disabled = false;
+    btn.textContent = '✅ Vendido — cobrado';
+  }
+}
+window.cajaMarcarCobrado = cajaMarcarCobrado;
+
+// ── Deshacer cobro: restaura stock + borra ventas del historial ───────
+async function cajaDeshacerCobro(carrito, ventasIds) {
+  try {
+    // Recargar stock actual para restaurar desde el estado guardado
+    const snapPrendas = await window._get(window._col(window._db, 'prendas'));
+    const batch = window._writeBatch(window._db);
+
+    // Restaurar stock sumando de vuelta lo que se descontó
+    for (const item of carrito.items) {
+      const { art, color, talle, qty } = item;
+      const docs = snapPrendas.docs.filter(d => {
+        const p = d.data();
+        return p.art === art && (p.color || '').trim() === color && p.talles?.[talle] !== undefined;
+      });
+      let restante = qty;
+      for (const d of docs) {
+        if (restante <= 0) break;
+        const p         = d.data();
+        const stockAct  = parseInt(p.talles[talle].stock) || 0;
+        const restaurar = restante;
+        restante = 0;
+        const nuevosTalles = { ...p.talles, [talle]: { ...p.talles[talle], stock: stockAct + restaurar } };
+        batch.update(window._doc(window._db, 'prendas', d.id), { talles: nuevosTalles });
+      }
+    }
+
+    // Borrar las ventas del historial que se crearon
+    for (const vid of ventasIds) {
+      batch.delete(window._doc(window._db, 'ventas', vid));
+    }
+
+    // Restaurar el carrito a estado pendiente
+    batch.update(window._doc(window._db, 'carritos', carrito.id), {
+      estado: 'pendiente',
+    });
+
+    await batch.commit();
+    allVentas = [];
+    await loadStock();
+    showToast(`↩ Venta de ${carrito.cliente} revertida — carrito restaurado`, null, 4000);
+  } catch (e) {
+    showToast('Error al revertir la venta. Revisá la conexión.');
+  }
+}
+
+
+
+function cajaNombreChange() {
+  const nombre = document.getElementById('caja-cliente-nombre').value.trim();
+  if (!_carritoActivo) return;
+  _carritoActivo.cliente = nombre;
+  document.getElementById('caja-carrito-label').textContent = '🛍️ Carrito de ' + nombre;
+}
+window.cajaNombreChange = cajaNombreChange;
+
+function cajaNuevoCarrito() {
+  const nombre = document.getElementById('caja-cliente-nombre').value.trim();
+  if (!nombre) { showToast('Ingresá el nombre del cliente primero'); return; }
+  _carritoActivo = { cliente: nombre, items: [] };
+  document.getElementById('caja-empty-state').style.display  = 'none';
+  document.getElementById('caja-carrito-activo').style.display = '';
+  document.getElementById('caja-carrito-label').textContent = '🛍️ Carrito de ' + nombre;
+  document.getElementById('caja-scan-input').value = '';
+  cajaCerrarSelector();
+  renderCarritoItems();
+}
+window.cajaNuevoCarrito = cajaNuevoCarrito;
+
+function cajaCancelarCarrito() {
+  if (!confirm('¿Cancelar el carrito de ' + (_carritoActivo?.cliente || '') + '?')) return;
+  _carritoActivo = null;
+  cajaDetenerScanner();
+  document.getElementById('caja-carrito-activo').style.display = 'none';
+  document.getElementById('caja-empty-state').style.display  = '';
+  document.getElementById('caja-cliente-nombre').value = '';
+}
+window.cajaCancelarCarrito = cajaCancelarCarrito;
+
+function cajaAgregarPorCodigo() {
+  const code = document.getElementById('caja-scan-input').value.trim();
+  if (!code) return;
+  cajaBuscarYMostrarSelector(code);
+  document.getElementById('caja-scan-input').value = '';
+}
+window.cajaAgregarPorCodigo = cajaAgregarPorCodigo;
+
+function cajaBuscarYMostrarSelector(art) {
+  if (!_carritoActivo) { showToast('Primero creá un carrito'); return; }
+  const prendas = allPrendas.filter(p => p.art === art.trim());
+  if (!prendas.length) { showToast('Artículo ' + art + ' no encontrado'); return; }
+  _cajaArtPendiente = art.trim();
+
+  // Armar coloresMap
+  const coloresMap = new Map();
+  prendas.forEach(p => {
+    const key = (p.color || '').trim();
+    if (!coloresMap.has(key)) coloresMap.set(key, {});
+    const ct = coloresMap.get(key);
+    Object.entries(p.talles || {}).forEach(([t, v]) => {
+      if (ct[t]) ct[t] = { ...ct[t], stock: (parseInt(ct[t].stock)||0) + (parseInt(v.stock)||0) };
+      else ct[t] = { ...v };
+    });
+  });
+
+  const modelo = prendas[0].modelo;
+  document.getElementById('caja-sel-art-info').innerHTML =
+    `<span class="art-code">${escapeHtml(art)}</span> <strong>${escapeHtml(modelo)}</strong>`;
+
+  const selColor = document.getElementById('caja-sel-color');
+  selColor.innerHTML = '<option value="">— Color —</option>';
+  [...coloresMap.keys()].forEach(nombre => {
+    const o = document.createElement('option');
+    o.value = nombre; o.textContent = nombre;
+    selColor.appendChild(o);
+  });
+
+  const selTalle = document.getElementById('caja-sel-talle');
+  selTalle.innerHTML = '<option value="">— Talle —</option>';
+  selTalle.disabled = true;
+
+  document.getElementById('caja-sel-qty').value = 1;
+  document.getElementById('caja-selector-prenda').style.display = '';
+  selColor.focus();
+}
+
+function cajaSelColorChange() {
+  const color = document.getElementById('caja-sel-color').value;
+  const selTalle = document.getElementById('caja-sel-talle');
+  selTalle.innerHTML = '<option value="">— Talle —</option>';
+  if (!color || !_cajaArtPendiente) { selTalle.disabled = true; return; }
+  const prendas = allPrendas.filter(p => p.art === _cajaArtPendiente && (p.color||'').trim() === color);
+  const tallesMap = {};
+  prendas.forEach(p => { Object.entries(p.talles||{}).forEach(([t,v])=>{ if(tallesMap[t]) tallesMap[t]={...tallesMap[t],stock:(parseInt(tallesMap[t].stock)||0)+(parseInt(v.stock)||0)}; else tallesMap[t]={...v}; }); });
+  sortTalles(tallesMap).forEach(([t, v]) => {
+    const s = parseInt(v.stock) || 0;
+    const o = document.createElement('option');
+    o.value = t; o.textContent = `Talle ${t} (${s} en stock)`;
+    if (s === 0) { o.textContent += ' — sin stock'; o.disabled = true; }
+    selTalle.appendChild(o);
+  });
+  selTalle.disabled = false;
+}
+window.cajaSelColorChange = cajaSelColorChange;
+
+function cajaCerrarSelector() {
+  document.getElementById('caja-selector-prenda').style.display = 'none';
+  _cajaArtPendiente = null;
+}
+window.cajaCerrarSelector = cajaCerrarSelector;
+
+function cajaConfirmarAgregar() {
+  if (!_carritoActivo || !_cajaArtPendiente) return;
+  const color = document.getElementById('caja-sel-color').value;
+  const talle = document.getElementById('caja-sel-talle').value;
+  const qty   = parseInt(document.getElementById('caja-sel-qty').value) || 1;
+  if (!color) { showToast('Seleccioná un color'); return; }
+  if (!talle) { showToast('Seleccioná un talle'); return; }
+
+  const prendas = allPrendas.filter(p => p.art === _cajaArtPendiente && (p.color||'').trim() === color);
+  let precioLista = 0;
+  prendas.forEach(p => { if (!precioLista && p.talles?.[talle]?.precio) precioLista = parseFloat(p.talles[talle].precio); });
+  const precioEf = precioLista > 0 ? calcEf(precioLista) : 0;
+  const modelo   = prendas[0]?.modelo || '';
+
+  // Verificar stock disponible
+  let stockDisp = 0;
+  prendas.forEach(p => { if (p.talles?.[talle]) stockDisp += parseInt(p.talles[talle].stock) || 0; });
+  // Restar lo que ya está en el carrito para este mismo art/color/talle
+  const yaEnCarrito = _carritoActivo.items.filter(i => i.art === _cajaArtPendiente && i.color === color && i.talle === talle).reduce((a, i) => a + i.qty, 0);
+  if (qty + yaEnCarrito > stockDisp) {
+    showToast(`Stock insuficiente. Disponible: ${stockDisp - yaEnCarrito} unid.`);
+    return;
+  }
+
+  // Si ya existe el mismo item en el carrito, sumar cantidad
+  const existente = _carritoActivo.items.find(i => i.art === _cajaArtPendiente && i.color === color && i.talle === talle);
+  if (existente) {
+    existente.qty += qty;
+  } else {
+    _carritoActivo.items.push({ art: _cajaArtPendiente, modelo, color, talle, qty, precioLista, precioEf });
+  }
+
+  cajaCerrarSelector();
+  renderCarritoItems();
+  showToast(`✓ Agregado: ${_cajaArtPendiente} · ${color} · T.${talle} ×${qty}`, null, 2000);
+}
+window.cajaConfirmarAgregar = cajaConfirmarAgregar;
+
+function cajaQuitarItem(idx) {
+  if (!_carritoActivo) return;
+  _carritoActivo.items.splice(idx, 1);
+  renderCarritoItems();
+}
+window.cajaQuitarItem = cajaQuitarItem;
+
+function renderCarritoItems() {
+  const items  = _carritoActivo?.items || [];
+  const el     = document.getElementById('caja-items-list');
+  const footer = document.getElementById('caja-footer');
+
+  if (!items.length) {
+    el.innerHTML = '<div style="text-align:center;color:var(--text3);font-size:13px;padding:16px 0">Carrito vacío — escaneá o buscá una prenda.</div>';
+    footer.style.display = 'none';
+    return;
+  }
+
+  el.innerHTML = items.map((i, idx) => `
+    <div class="caja-item-row">
+      <div class="cir-info">
+        <span class="cir-art">${escapeHtml(i.art)}</span>
+        <span class="cir-modelo">${escapeHtml(i.modelo)}</span>
+        <span class="cir-meta">${escapeHtml(i.color)} · T.${escapeHtml(i.talle)} · ×${i.qty}</span>
+      </div>
+      <div class="cir-precio">
+        <span>${fmtPeso((i.precioEf || 0) * i.qty)}</span>
+        <button class="btn btn-ghost btn-sm" onclick="cajaQuitarItem(${idx})" style="color:var(--danger);padding:2px 6px">✕</button>
+      </div>
+    </div>`).join('');
+
+  const totalLista = items.reduce((a, i) => a + (i.precioLista || 0) * i.qty, 0);
+  const totalEf    = items.reduce((a, i) => a + (i.precioEf    || 0) * i.qty, 0);
+  document.getElementById('caja-total-lista').textContent = fmtPeso(totalLista);
+  document.getElementById('caja-total-ef').textContent    = fmtPeso(totalEf);
+  footer.style.display = '';
+}
+
+// ── Enviar carrito a caja (empleado) ─────────────────────────────────
+async function cajaEnviarACaja() {
+  if (!_carritoActivo || !_carritoActivo.items.length) return;
+  const btn = document.querySelector('#caja-footer .btn-primary');
+  btn.disabled = true; btn.textContent = 'Enviando...';
+  try {
+    await window._add(window._col(window._db, 'carritos'), {
+      cliente:  _carritoActivo.cliente,
+      items:    _carritoActivo.items,
+      estado:   'pendiente',
+      creadoEn: window._Timestamp.now(),
+    });
+    const nombre = _carritoActivo.cliente;
+    const cant   = _carritoActivo.items.length;
+    _carritoActivo = null;
+    cajaDetenerScanner();
+    document.getElementById('caja-carrito-activo').style.display = 'none';
+    document.getElementById('caja-empty-state').style.display  = '';
+    document.getElementById('caja-cliente-nombre').value = '';
+    showToast(`✓ Carrito de ${nombre} enviado a caja (${cant} prenda${cant !== 1 ? 's' : ''})`, null, 4000);
+  } catch (e) {
+    showToast('Error al enviar. Revisá la conexión.');
+    btn.disabled = false; btn.textContent = '📤 Enviar a caja';
+  }
+}
+window.cajaEnviarACaja = cajaEnviarACaja;
+
+// ── Scanner inline para Caja ──────────────────────────────────────────
+function cajaActivarScanner() {
+  const wrap  = document.getElementById('caja-scanner-wrap');
+  const video = document.getElementById('caja-scanner-video');
+  wrap.style.display = '';
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+    .then(stream => {
+      _cajaScanStream = stream;
+      video.srcObject = stream;
+      const canvas = document.createElement('canvas');
+      const ctx    = canvas.getContext('2d', { willReadFrequently: true });
+      video.addEventListener('loadedmetadata', () => { canvas.width = video.videoWidth; canvas.height = video.videoHeight; });
+      _cajaScanInterval = setInterval(() => {
+        if (video.readyState < video.HAVE_ENOUGH_DATA || !video.videoWidth) return;
+        if (canvas.width !== video.videoWidth) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+        if (code) {
+          cajaDetenerScanner();
+          // Extraer el código de artículo de la URL del QR (parámetro ?art=)
+          let artCode = code.data;
+          try {
+            const url = new URL(code.data);
+            const paramArt = url.searchParams.get('art');
+            if (paramArt) artCode = paramArt;
+          } catch (e) { /* no es URL, usar el dato directo */ }
+          cajaBuscarYMostrarSelector(artCode);
+        }
+      }, 200);
+    })
+    .catch(() => { showToast('No se pudo acceder a la cámara.'); cajaDetenerScanner(); });
+}
+window.cajaActivarScanner = cajaActivarScanner;
+
+function cajaDetenerScanner() {
+  if (_cajaScanStream)   { _cajaScanStream.getTracks().forEach(t => t.stop()); _cajaScanStream = null; }
+  if (_cajaScanInterval) { clearInterval(_cajaScanInterval); _cajaScanInterval = null; }
+  const wrap = document.getElementById('caja-scanner-wrap');
+  if (wrap) wrap.style.display = 'none';
+}
+window.cajaDetenerScanner = cajaDetenerScanner;
