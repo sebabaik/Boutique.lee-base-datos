@@ -35,6 +35,7 @@
         <option value="zero">Sin stock</option>
       </select>
       <button class="btn btn-primary" onclick="openModal()">+ Nueva prenda</button>
+      <button class="btn btn-cambio" onclick="openCambioModal()">🔄 Cambio</button>
     </div>
     <div class="table-wrap">
       <table>
@@ -457,6 +458,101 @@
       </div>
     </div>
   </div>
+
+  <!-- ── MODAL: CAMBIO DE PRENDA ── -->
+  <div class="modal-overlay" id="modal-cambio">
+    <div class="modal" style="max-width:500px">
+      <div class="modal-header">
+        <h3>🔄 Cambio de prenda</h3>
+        <button class="modal-close" onclick="closeCambioModal()">×</button>
+      </div>
+
+      <!-- Resumen en curso -->
+      <div id="cambio-resumen" style="display:none;margin-bottom:14px">
+        <div class="cambio-resumen-box devuelta">
+          <div class="cambio-resumen-label">↩ Prenda devuelta</div>
+          <div id="cambio-resumen-devuelta"></div>
+        </div>
+      </div>
+
+      <!-- PASO 1: Prenda devuelta -->
+      <div id="cambio-step1">
+        <div class="cambio-step-title">Paso 1 — ¿Qué prenda trae la clienta?</div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label>Artículo devuelto</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="cambio-step1-art" placeholder="ej: 100-23" style="flex:1" onkeydown="if(event.key==='Enter')cambioBuscarArt(1)" />
+            <button class="btn btn-ghost btn-sm" onclick="cambioBuscarArt(1)">Buscar</button>
+          </div>
+          <div id="cambio-step1-info" style="display:none;margin-top:6px;font-size:12px;color:var(--accent2);font-weight:500"></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <div style="flex:1;min-width:120px">
+            <label style="font-size:12px;display:block;margin-bottom:4px">Color</label>
+            <select id="cambio-step1-color" class="venta-select" onchange="cambioOnColorChange(1)"><option value="">— Color —</option></select>
+          </div>
+          <div style="flex:1;min-width:120px">
+            <label style="font-size:12px;display:block;margin-bottom:4px">Talle</label>
+            <select id="cambio-step1-talle" class="venta-select" disabled><option value="">— Talle —</option></select>
+          </div>
+          <div style="width:70px">
+            <label style="font-size:12px;display:block;margin-bottom:4px">Cant.</label>
+            <input type="number" id="cambio-step1-qty" value="1" min="1" class="qty-input" style="width:100%" />
+          </div>
+        </div>
+        <div id="cambio-step1-error" style="display:none;padding:8px 12px;background:#fde8e8;border-radius:6px;font-size:12px;color:var(--danger);margin-bottom:10px"></div>
+        <div class="modal-actions" style="margin-top:0">
+          <button class="btn btn-ghost" onclick="closeCambioModal()">Cancelar</button>
+          <button class="btn btn-primary" onclick="cambioConfirmarPaso1()">Siguiente →</button>
+        </div>
+      </div>
+
+      <!-- PASO 2: Prenda nueva -->
+      <div id="cambio-step2" style="display:none">
+        <div class="cambio-step-title">Paso 2 — ¿Por qué prenda la cambia?</div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label>Artículo nuevo</label>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="cambio-step2-art" placeholder="ej: 100-23" style="flex:1" onkeydown="if(event.key==='Enter')cambioBuscarArt(2)" />
+            <button class="btn btn-ghost btn-sm" onclick="cambioBuscarArt(2)">Buscar</button>
+          </div>
+          <div id="cambio-step2-info" style="display:none;margin-top:6px;font-size:12px;color:var(--accent2);font-weight:500"></div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <div style="flex:1;min-width:120px">
+            <label style="font-size:12px;display:block;margin-bottom:4px">Color</label>
+            <select id="cambio-step2-color" class="venta-select" onchange="cambioOnColorChange(2)"><option value="">— Color —</option></select>
+          </div>
+          <div style="flex:1;min-width:120px">
+            <label style="font-size:12px;display:block;margin-bottom:4px">Talle</label>
+            <select id="cambio-step2-talle" class="venta-select" disabled><option value="">— Talle —</option></select>
+          </div>
+          <div style="width:70px">
+            <label style="font-size:12px;display:block;margin-bottom:4px">Cant.</label>
+            <input type="number" id="cambio-step2-qty" value="1" min="1" class="qty-input" style="width:100%" />
+          </div>
+        </div>
+        <div id="cambio-step2-error" style="display:none;padding:8px 12px;background:#fde8e8;border-radius:6px;font-size:12px;color:var(--danger);margin-bottom:10px"></div>
+
+        <!-- Resultado -->
+        <div id="cambio-panel-resultado" style="display:none;margin-bottom:14px">
+          <div class="cambio-resumen-box nueva" style="margin-bottom:10px">
+            <div class="cambio-resumen-label">✨ Prenda nueva</div>
+            <div id="cambio-resumen-nueva"></div>
+          </div>
+          <div id="cambio-resultado-diferencia"></div>
+        </div>
+
+        <div class="modal-actions" style="margin-top:0;flex-wrap:wrap;gap:8px">
+          <button class="btn btn-ghost" onclick="cambioVolverPaso1()">← Volver</button>
+          <button class="btn btn-ghost" onclick="cambioCalcularDiferencia()">Calcular diferencia</button>
+          <button class="btn btn-accent" id="btn-confirmar-cambio" onclick="confirmarCambio()" disabled>✓ Confirmar cambio</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
   <script type="module" src="./firebase-init.js"></script>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>

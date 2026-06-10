@@ -527,3 +527,72 @@
   margin-top: 6px;
   margin-bottom: 0;
 }
+
+/* ── Botón Cambio ── */
+.btn-cambio {
+  background: #e8f4ed;
+  color: #2d7a4f;
+  border: 1px solid #b8ddc7;
+  padding: 0 16px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-cambio:hover { background: #d0ecdb; }
+
+/* ── Modal Cambio ── */
+.cambio-step-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent2);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cambio-resumen-box {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+.cambio-resumen-box.devuelta {
+  background: #fde8e8;
+  border: 1px solid #f5c0c0;
+}
+.cambio-resumen-box.nueva {
+  background: #e8f4ed;
+  border: 1px solid #b8ddc7;
+}
+.cambio-resumen-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  opacity: .7;
+}
+.cambio-diff {
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  text-align: center;
+}
+.cambio-diff.positivo {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  color: #856404;
+}
+.cambio-diff.negativo {
+  background: #e8f4ed;
+  border: 1px solid #b8ddc7;
+  color: #2d7a4f;
+}
+.cambio-diff.neutro {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text2);
+}

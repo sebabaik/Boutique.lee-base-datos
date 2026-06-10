@@ -267,7 +267,7 @@
     window.toggleDetail = toggleDetail;
 
     // ── Modal nueva/editar prenda ─────────────────────────
-    const COLORES_PRESET = ['Blanco','Negro','Gris','Beige','Crema','Rosa','Rojo','Bordó','Naranja','Amarillo','Celeste','Azul','Marino','Verde','Lila','Violeta','Estampado'];
+    const COLORES_PRESET = ['Blanco','Negro','Gris','Beige','Crema','Rosa','Rojo','Bordó','Naranja','Amarillo','Celeste','Azul','Marino','Verde','Lila','Violeta','Marrón','Estampado'];
     const TALLES_PRESET  = ['S','M','L','XL','XXL','XXXL','2','3','4','5','6','7','8','9','10','11','12'];
 
     let _coloresDisp = [...COLORES_PRESET];
@@ -348,7 +348,7 @@
   div.className = 'talle-row'; div.dataset.talle = talle; div.id = 'tr-' + talleCount;
   div.innerHTML = `
     <div><label>Talle</label><input type="text" class="t-nombre" value="${talle}" readonly style="background:var(--bg3);color:var(--text2);cursor:default;font-weight:600"/></div>
-    <div><label>Stock</label><input type="number" class="t-stock" placeholder="0" min="0" value="${stock}"/></div>
+    <div><label>Stock</label><input type="number" class="t-stock" placeholder="" min="0" value="${stock}"/></div>
     <div>
       <label>Precio lista ($)</label>
       <input type="number" class="t-precio" placeholder="19000" value="${precio}" oninput="updateEfPreview(this,${talleCount})"/>
@@ -359,17 +359,23 @@
   // Navegación con flechas entre casillas
   div.querySelectorAll('input').forEach(input => {
     input.addEventListener('keydown', e => {
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-      e.preventDefault();
+      if (!['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) return;
 
-      // Todos los inputs editables del container (excluye los readonly de talle)
+      // Todos los inputs editables visibles (excluye readonly)
       const allInputs = [...document.querySelectorAll('#talles-container .talle-row:not([style*="display: none"]) input:not([readonly])')];
       const idx = allInputs.indexOf(e.target);
       if (idx === -1) return;
 
-      // ArrowDown → siguiente, ArrowUp → anterior
-      const next = allInputs[e.key === 'ArrowDown' ? idx + 1 : idx - 1];
-      if (next) next.focus();
+      // Calcular cuántas columnas hay por fila (stock + precio = 2)
+      const COLS = 2;
+
+      let next = null;
+      if (e.key === 'ArrowDown')  next = allInputs[idx + COLS];
+      if (e.key === 'ArrowUp')    next = allInputs[idx - COLS];
+      if (e.key === 'ArrowRight') next = allInputs[idx + 1];
+      if (e.key === 'ArrowLeft')  next = allInputs[idx - 1];
+
+      if (next) { e.preventDefault(); next.focus(); next.select(); }
     });
   });
 
@@ -1025,7 +1031,260 @@ window.startScanner = startScanner;
       } catch (e) { showToast('Error al revertir.', null, 3000); }
     }
 
-    // ── Eliminar ──────────────────────────────────────────
+    // ── CAMBIO DE PRENDA ─────────────────────────────────
+
+    let _cambioStep = 1;           // 1 = prenda devuelta, 2 = prenda nueva
+    let _cambioDevuelta = null;    // { art, modelo, color, talle, qty, precioLista, precioEf }
+    let _cambioNueva = null;
+    let _cambioArtActual = null;   // art cargado en el paso actual
+
+    function openCambioModal() {
+      _cambioStep = 1;
+      _cambioDevuelta = null;
+      _cambioNueva = null;
+      _cambioArtActual = null;
+      document.getElementById('cambio-step1').style.display = '';
+      document.getElementById('cambio-step2').style.display = 'none';
+      document.getElementById('cambio-resumen').style.display = 'none';
+      document.getElementById('cambio-step1-art').value = '';
+      document.getElementById('cambio-step1-color').innerHTML = '<option value="">— Color —</option>';
+      document.getElementById('cambio-step1-talle').innerHTML = '<option value="">— Talle —</option>';
+      document.getElementById('cambio-step1-talle').disabled = true;
+      document.getElementById('cambio-step1-qty').value = 1;
+      document.getElementById('cambio-step1-info').style.display = 'none';
+      document.getElementById('cambio-step1-error').style.display = 'none';
+      document.getElementById('modal-cambio').classList.add('open');
+    }
+    window.openCambioModal = openCambioModal;
+
+    function closeCambioModal() {
+      document.getElementById('modal-cambio').classList.remove('open');
+    }
+    window.closeCambioModal = closeCambioModal;
+
+    function cambioBuscarArt(paso) {
+      const artInput = document.getElementById(`cambio-step${paso}-art`);
+      const art = artInput.value.trim();
+      if (!art) return;
+      const prendas = allPrendas.filter(p => p.art === art);
+      const selColor = document.getElementById(`cambio-step${paso}-color`);
+      const selTalle = document.getElementById(`cambio-step${paso}-talle`);
+      const infoEl   = document.getElementById(`cambio-step${paso}-info`);
+      const errEl    = document.getElementById(`cambio-step${paso}-error`);
+      errEl.style.display = 'none';
+      if (!prendas.length) {
+        errEl.textContent = `No se encontró ninguna prenda con el código "${art}".`;
+        errEl.style.display = '';
+        selColor.innerHTML = '<option value="">— Color —</option>';
+        selTalle.innerHTML = '<option value="">— Talle —</option>';
+        selTalle.disabled = true;
+        infoEl.style.display = 'none';
+        return;
+      }
+      const modelo = prendas[0].modelo;
+      infoEl.style.display = '';
+      infoEl.textContent = modelo;
+      // Armar colores
+      const coloresMap = new Map();
+      prendas.forEach(p => {
+        const key = (p.color||'').trim();
+        if (!coloresMap.has(key)) coloresMap.set(key, {});
+        const ct = coloresMap.get(key);
+        Object.entries(p.talles||{}).forEach(([t,v])=>{ if(ct[t]) ct[t]={...ct[t],stock:(parseInt(ct[t].stock)||0)+(parseInt(v.stock)||0)}; else ct[t]={...v}; });
+      });
+      selColor.innerHTML = '<option value="">— Color —</option>';
+      [...coloresMap.keys()].forEach(c => {
+        const o = document.createElement('option'); o.value = c; o.textContent = c; selColor.appendChild(o);
+      });
+      selTalle.innerHTML = '<option value="">— Talle —</option>';
+      selTalle.disabled = true;
+      if (paso === 1) _cambioArtActual = art;
+    }
+    window.cambioBuscarArt = cambioBuscarArt;
+
+    function cambioOnColorChange(paso) {
+      const art   = document.getElementById(`cambio-step${paso}-art`).value.trim();
+      const color = document.getElementById(`cambio-step${paso}-color`).value;
+      const selTalle = document.getElementById(`cambio-step${paso}-talle`);
+      selTalle.innerHTML = '<option value="">— Talle —</option>';
+      if (!color || !art) { selTalle.disabled = true; return; }
+      const prendas = allPrendas.filter(p => p.art === art && (p.color||'').trim() === color);
+      const tallesMap = {};
+      prendas.forEach(p => { Object.entries(p.talles||{}).forEach(([t,v])=>{ if(tallesMap[t]) tallesMap[t]={...tallesMap[t],stock:(parseInt(tallesMap[t].stock)||0)+(parseInt(v.stock)||0)}; else tallesMap[t]={...v}; }); });
+      sortTalles(tallesMap).forEach(([t, v]) => {
+        const s = parseInt(v.stock)||0;
+        const o = document.createElement('option');
+        o.value = t; o.textContent = `Talle ${t}  (${s} en stock)`;
+        // En paso 2 deshabilitar sin stock; en paso 1 no (la clienta lo trae de vuelta)
+        if (paso === 2 && s === 0) { o.textContent += ' — sin stock'; o.disabled = true; }
+        selTalle.appendChild(o);
+      });
+      selTalle.disabled = false;
+    }
+    window.cambioOnColorChange = cambioOnColorChange;
+
+    function cambioConfirmarPaso1() {
+      const art   = document.getElementById('cambio-step1-art').value.trim();
+      const color = document.getElementById('cambio-step1-color').value;
+      const talle = document.getElementById('cambio-step1-talle').value;
+      const qty   = parseInt(document.getElementById('cambio-step1-qty').value) || 1;
+      const errEl = document.getElementById('cambio-step1-error');
+      errEl.style.display = 'none';
+      if (!art || !color || !talle) { errEl.textContent = 'Completá artículo, color y talle de la prenda devuelta.'; errEl.style.display = ''; return; }
+      const prendas = allPrendas.filter(p => p.art === art && (p.color||'').trim() === color);
+      let precioLista = 0;
+      prendas.forEach(p => { if (!precioLista && p.talles?.[talle]?.precio) precioLista = parseFloat(p.talles[talle].precio); });
+      const precioEf = precioLista > 0 ? calcEf(precioLista) : 0;
+      const modelo = prendas[0]?.modelo || art;
+      _cambioDevuelta = { art, modelo, color, talle, qty, precioLista, precioEf };
+
+      // Mostrar resumen paso 1 y pasar a paso 2
+      document.getElementById('cambio-resumen-devuelta').innerHTML = `
+        <strong>${art}</strong> · ${modelo}<br>
+        <span style="font-size:12px;color:var(--text2)">${color} · T.${talle} · ×${qty} — ${fmtPeso(precioEf * qty)}</span>`;
+
+      document.getElementById('cambio-step1').style.display = 'none';
+      document.getElementById('cambio-step2').style.display = '';
+      document.getElementById('cambio-step2-art').value = '';
+      document.getElementById('cambio-step2-color').innerHTML = '<option value="">— Color —</option>';
+      document.getElementById('cambio-step2-talle').innerHTML = '<option value="">— Talle —</option>';
+      document.getElementById('cambio-step2-talle').disabled = true;
+      document.getElementById('cambio-step2-qty').value = qty;
+      document.getElementById('cambio-step2-info').style.display = 'none';
+      document.getElementById('cambio-step2-error').style.display = 'none';
+      document.getElementById('cambio-resumen').style.display = '';
+      _cambioStep = 2;
+    }
+    window.cambioConfirmarPaso1 = cambioConfirmarPaso1;
+
+    function cambioVolverPaso1() {
+      _cambioStep = 1;
+      _cambioNueva = null;
+      document.getElementById('cambio-step2').style.display = 'none';
+      document.getElementById('cambio-step1').style.display = '';
+      document.getElementById('cambio-resumen').style.display = 'none';
+    }
+    window.cambioVolverPaso1 = cambioVolverPaso1;
+
+    function cambioCalcularDiferencia() {
+      const art   = document.getElementById('cambio-step2-art').value.trim();
+      const color = document.getElementById('cambio-step2-color').value;
+      const talle = document.getElementById('cambio-step2-talle').value;
+      const qty   = parseInt(document.getElementById('cambio-step2-qty').value) || 1;
+      const errEl = document.getElementById('cambio-step2-error');
+      errEl.style.display = 'none';
+      if (!art || !color || !talle) { errEl.textContent = 'Completá artículo, color y talle de la prenda nueva.'; errEl.style.display = ''; return; }
+
+      // Verificar stock
+      const prendas = allPrendas.filter(p => p.art === art && (p.color||'').trim() === color);
+      let stockDisp = 0, precioLista = 0;
+      prendas.forEach(p => { if (p.talles?.[talle]) { stockDisp += parseInt(p.talles[talle].stock)||0; if (!precioLista && p.talles[talle].precio) precioLista = parseFloat(p.talles[talle].precio); } });
+      if (stockDisp < qty) { errEl.textContent = `Stock insuficiente. Disponible: ${stockDisp} unid.`; errEl.style.display = ''; return; }
+
+      const precioEf = precioLista > 0 ? calcEf(precioLista) : 0;
+      const modelo = prendas[0]?.modelo || art;
+      _cambioNueva = { art, modelo, color, talle, qty, precioLista, precioEf };
+
+      // Calcular diferencia
+      const totalDevuelta = (_cambioDevuelta.precioEf || 0) * _cambioDevuelta.qty;
+      const totalNueva    = (precioEf || 0) * qty;
+      const diff = totalNueva - totalDevuelta;
+
+      const resEl = document.getElementById('cambio-resultado-diferencia');
+      if (diff > 0) {
+        resEl.innerHTML = `<div class="cambio-diff positivo">La clienta <strong>abona ${fmtPeso(diff)}</strong> adicionales</div>`;
+      } else if (diff < 0) {
+        resEl.innerHTML = `<div class="cambio-diff negativo">Diferencia a favor de la clienta: <strong>${fmtPeso(Math.abs(diff))}</strong> → emitir vale físico</div>`;
+      } else {
+        resEl.innerHTML = `<div class="cambio-diff neutro">✓ Sin diferencia — cambio exacto</div>`;
+      }
+
+      document.getElementById('cambio-resumen-nueva').innerHTML = `
+        <strong>${art}</strong> · ${modelo}<br>
+        <span style="font-size:12px;color:var(--text2)">${color} · T.${talle} · ×${qty} — ${fmtPeso(precioEf * qty)}</span>`;
+
+      document.getElementById('cambio-panel-resultado').style.display = '';
+      document.getElementById('btn-confirmar-cambio').disabled = false;
+    }
+    window.cambioCalcularDiferencia = cambioCalcularDiferencia;
+
+    async function confirmarCambio() {
+      if (!_cambioDevuelta || !_cambioNueva) return;
+      const btn = document.getElementById('btn-confirmar-cambio');
+      btn.disabled = true; btn.textContent = 'Procesando...';
+
+      try {
+        const batch = window._writeBatch(window._db);
+
+        // 1. Devolver stock de la prenda devuelta
+        const docsDevuelta = allPrendas.filter(p => p.art === _cambioDevuelta.art && (p.color||'').trim() === _cambioDevuelta.color && p.talles?.[_cambioDevuelta.talle]);
+        let restDevuelta = _cambioDevuelta.qty;
+        const undoDevuelta = [];
+        for (const p of docsDevuelta) {
+          if (restDevuelta <= 0) break;
+          const stockActual = parseInt(p.talles[_cambioDevuelta.talle].stock) || 0;
+          const agrega = restDevuelta; // devolvemos todo al primer doc
+          undoDevuelta.push({ id: p.id, tallesAntes: { ...p.talles } });
+          batch.update(window._doc(window._db, 'prendas', p.id), {
+            talles: { ...p.talles, [_cambioDevuelta.talle]: { ...p.talles[_cambioDevuelta.talle], stock: stockActual + agrega } }
+          });
+          restDevuelta = 0;
+        }
+
+        // 2. Descontar stock de la prenda nueva
+        const docsNueva = allPrendas.filter(p => p.art === _cambioNueva.art && (p.color||'').trim() === _cambioNueva.color && p.talles?.[_cambioNueva.talle] && (parseInt(p.talles[_cambioNueva.talle].stock)||0) > 0);
+        let restNueva = _cambioNueva.qty;
+        const undoNueva = [];
+        for (const p of docsNueva) {
+          if (restNueva <= 0) break;
+          const stockDoc = parseInt(p.talles[_cambioNueva.talle].stock) || 0;
+          const descuento = Math.min(stockDoc, restNueva);
+          restNueva -= descuento;
+          undoNueva.push({ id: p.id, tallesAntes: { ...p.talles } });
+          batch.update(window._doc(window._db, 'prendas', p.id), {
+            talles: { ...p.talles, [_cambioNueva.talle]: { ...p.talles[_cambioNueva.talle], stock: stockDoc - descuento } }
+          });
+        }
+        if (restNueva > 0) throw new Error('Stock insuficiente en prenda nueva');
+
+        // 3. Registrar el cambio en historial de ventas
+        const totalDevuelta = (_cambioDevuelta.precioEf || 0) * _cambioDevuelta.qty;
+        const totalNueva    = (_cambioNueva.precioEf    || 0) * _cambioNueva.qty;
+        const diff = totalNueva - totalDevuelta;
+        batch.set(window._doc(window._col(window._db, 'ventas')), {
+          fecha:          window._Timestamp.now(),
+          tipo:           'cambio',
+          art:            _cambioNueva.art,
+          modelo:         _cambioNueva.modelo,
+          color:          _cambioNueva.color,
+          talle:          _cambioNueva.talle,
+          cantidad:       _cambioNueva.qty,
+          precioLista:    _cambioNueva.precioLista,
+          precioEfectivo: _cambioNueva.precioEf,
+          artDevuelto:    _cambioDevuelta.art,
+          modeloDevuelto: _cambioDevuelta.modelo,
+          colorDevuelto:  _cambioDevuelta.color,
+          talleDevuelto:  _cambioDevuelta.talle,
+          cantDevuelta:   _cambioDevuelta.qty,
+          diferencia:     diff,
+        });
+
+        await batch.commit();
+        allVentas = [];
+        await loadStock();
+        closeCambioModal();
+        const label = `${_cambioDevuelta.art} → ${_cambioNueva.art}`;
+        showToast(`✓ Cambio registrado — ${label}`, null, 5000);
+        btn.textContent = 'Confirmar cambio';
+      } catch(e) {
+        document.getElementById('cambio-step2-error').textContent = 'Error al procesar. Revisá la conexión.';
+        document.getElementById('cambio-step2-error').style.display = '';
+        btn.disabled = false; btn.textContent = 'Confirmar cambio';
+      }
+    }
+    window.confirmarCambio = confirmarCambio;
+
+
     function openEliminarModal(art) {
       elimArt = art.trim();
       const prendas = allPrendas.filter(p => p.art === elimArt);
