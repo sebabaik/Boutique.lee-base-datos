@@ -5,6 +5,8 @@
     let talleCount      = 0;
     let scannerStream   = null;
     let scannerInterval = null;
+    let _lastScanCode = null;
+    let _lastScanTime = 0;
     let ventaArt        = null;
     let elimArt         = null;
     let _chartVentas    = null;  // instancia del gráfico Chart.js
@@ -155,8 +157,9 @@
         const snap = await window._get(q);
         allPrendas = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         buildCatFilter();
-        renderStock();
+        filterStock();
       } catch (e) {
+        console.error('Error en loadStock:', e);
         document.getElementById('stock-tbody').innerHTML =
           '<tr><td colspan="9" class="loading" style="color:#e05252">Error al cargar. Verificá la conexión a Firebase.</td></tr>';
       }
@@ -166,9 +169,11 @@
     function buildCatFilter() {
       const cats = [...new Set(allPrendas.map(p => p.art.split('-')[0]))].sort();
       const sel  = document.getElementById('filtCat');
+      const valorPrevio = sel.value;
       sel.innerHTML = '<option value="">Todas las categorías</option>';
       cats.forEach(c => { const o = document.createElement('option'); o.value = c; o.textContent = 'ART ' + c; sel.appendChild(o); });
-    }
+      if (cats.includes(valorPrevio)) sel.value = valorPrevio;
+}
 
     function filterStock() {
       const q   = document.getElementById('search').value.toLowerCase();
@@ -265,6 +270,22 @@
       btn.textContent   = isHidden ? '▾' : '▸';
     }
     window.toggleDetail = toggleDetail;
+
+    function focusArticulo(art) {
+  requestAnimationFrame(() => {
+    const rowId   = 'row-' + art.replace(/[^a-zA-Z0-9]/g, '_');
+    const mainRow = document.getElementById('detail-' + rowId)?.previousElementSibling;
+    if (!mainRow) return;
+    mainRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const fondoOriginal = mainRow.style.backgroundColor;
+    mainRow.style.transition = 'background-color 0.4s ease';
+    mainRow.style.backgroundColor = '#f5efe6';
+    setTimeout(() => { mainRow.style.backgroundColor = fondoOriginal; }, 1400);
+    const detailRow = document.getElementById('detail-' + rowId);
+    if (detailRow && detailRow.style.display === 'none') toggleDetail(rowId);
+  });
+}
+window.focusArticulo = focusArticulo;
 
     // ── Modal nueva/editar prenda ─────────────────────────
     const COLORES_PRESET = ['Blanco','Negro','Gris','Beige','Crema','Rosa','Rojo','Bordó','Naranja','Amarillo','Celeste','Azul','Marino','Verde','Lila','Violeta','Marrón','Estampado'];
@@ -455,7 +476,9 @@
           for (const color of _coloresSel) await window._add(window._col(window._db, 'prendas'), { art, modelo, color, talles });
           showToast(`Prenda guardada en ${_coloresSel.size} color${_coloresSel.size > 1 ? 'es' : ''}`);
         }
-        closeModal(); loadStock();
+        closeModal();
+        await loadStock();
+        focusArticulo(art);
       } catch (e) { showToast('Error al guardar. Revisá la conexión.'); }
     }
     window.guardarPrenda = guardarPrenda;
@@ -477,6 +500,8 @@
     video.srcObject = stream;
     video.style.display = 'block';
     ph.style.display = 'none';
+    const btnToggle = document.getElementById('btn-toggle-scanner');
+    if (btnToggle) { btnToggle.textContent = '⏹ Detener cámara'; btnToggle.classList.add('btn-scanning'); }
 
     // Canvas persistente — se crea una sola vez y se reutiliza
     const canvas = document.createElement('canvas');
@@ -505,8 +530,15 @@
       });
 
       if (code) {
-        stopScanner();
-        searchByCode(code.data);
+        const now = Date.now();
+        const esMismoCodigo = code.data === _lastScanCode && (now - _lastScanTime) < 2500;
+        if (!esMismoCodigo) {
+          _lastScanCode = code.data;
+          _lastScanTime = now;
+          searchByCode(code.data);
+          showToast('📷 Escaneado: ' + code.data, null, 1500);
+        }
+        // Ya no se detiene la cámara: queda lista para el próximo artículo
       }
     }, 200); // 200ms es más responsivo que 300ms
   })
@@ -522,7 +554,10 @@ window.startScanner = startScanner;
       if (scannerInterval) { clearInterval(scannerInterval); scannerInterval = null; }
       document.getElementById('scanner-video').style.display = 'none';
       document.getElementById('scanner-ph').style.display    = 'flex';
-    }
+      const btn = document.getElementById('btn-toggle-scanner');
+      if (btn) { btn.textContent = 'Activar cámara (escaneo continuo)'; btn.classList.remove('btn-scanning'); }
+      _lastScanCode = null; _lastScanTime = 0;
+}
 
     function buildScanTalles(talles) {
       const con = sortTalles(talles || {}).filter(([,v]) => parseInt(v.stock) > 0);

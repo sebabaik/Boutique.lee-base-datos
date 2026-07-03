@@ -66,7 +66,7 @@
           <p style="font-size:13px">Apuntá la cámara al código QR</p>
         </div>
       </div>
-      <button class="btn btn-primary" style="width:100%;margin-bottom:1rem" onclick="startScanner()">Activar cámara</button>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:1rem" id="btn-toggle-scanner" onclick="toggleScanner()">Activar cámara (escaneo continuo)</button>
       <div class="manual-input">
         <input type="text" id="manual-code" placeholder="O ingresá el código manualmente (ej: 100-23)" />
         <button class="btn btn-ghost" onclick="searchByCode(document.getElementById('manual-code').value)">Buscar</button>
