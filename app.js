@@ -525,6 +525,7 @@ window.focusArticulo = focusArticulo;
 
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      console.log('probando frame', canvas.width, canvas.height, 'jsQR existe:', typeof jsQR);
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: 'attemptBoth'
       });
