@@ -559,6 +559,13 @@ window.startScanner = startScanner;
       _lastScanCode = null; _lastScanTime = 0;
 }
 
+/** El botón del HTML llama a toggleScanner(); decide si iniciar o detener según el estado actual */
+    function toggleScanner() {
+      if (scannerStream) stopScanner();
+      else startScanner();
+    }
+    window.toggleScanner = toggleScanner;
+
     function buildScanTalles(talles) {
       const con = sortTalles(talles || {}).filter(([,v]) => parseInt(v.stock) > 0);
       if (!con.length) return '<p style="color:var(--text3);font-size:12px;text-align:center;padding:8px 0">Sin stock en este color</p>';
