@@ -526,7 +526,7 @@ window.focusArticulo = focusArticulo;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert'   // más rápido; cambiá a 'attemptBoth' si hay QRs invertidos
+        inversionAttempts: 'attemptBoth'
       });
 
       if (code) {
@@ -535,8 +535,17 @@ window.focusArticulo = focusArticulo;
         if (!esMismoCodigo) {
           _lastScanCode = code.data;
           _lastScanTime = now;
-          searchByCode(code.data);
-          showToast('📷 Escaneado: ' + code.data, null, 1500);
+
+          // Extraer el código de artículo si el QR contiene una URL (?art=...)
+          let artCode = code.data;
+          try {
+            const url = new URL(code.data);
+            const paramArt = url.searchParams.get('art');
+            if (paramArt) artCode = paramArt;
+          } catch (e) { /* no es una URL, usar el dato tal cual */ }
+
+          searchByCode(artCode);
+          showToast('📷 Escaneado: ' + artCode, null, 1500);
         }
         // Ya no se detiene la cámara: queda lista para el próximo artículo
       }
