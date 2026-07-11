@@ -507,6 +507,10 @@ window.focusArticulo = focusArticulo;
     const canvas = document.createElement('canvas');
     const ctx    = canvas.getContext('2d', { willReadFrequently: true });
 
+    // TEMPORAL: mostrar el canvas capturado en pantalla para depurar
+canvas.style.cssText = 'position:fixed;bottom:10px;right:10px;width:220px;border:3px solid red;z-index:9999;background:#000';
+document.body.appendChild(canvas);
+
     video.addEventListener('loadedmetadata', () => {
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
